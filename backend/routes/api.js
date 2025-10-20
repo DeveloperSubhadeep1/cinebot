@@ -7,6 +7,11 @@ const path = require('path');
 
 const router = express.Router();
 
+// Helper to escape regex special characters
+function escapeRegex(string) {
+    return string.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+}
+
 // Rate limiter for download/stream endpoints
 const downloadLimiter = rateLimit({
 	windowMs: 15 * 60 * 1000, // 15 minutes
@@ -36,8 +41,16 @@ router.get('/about', async (req, res) => {
 
 router.get('/search', async (req, res) => {
     const { query, page = 1, limit = 20 } = req.query;
-    if (!query) {
-        return res.status(400).json({ message: 'Search query is required' });
+    
+    const trimmedQuery = query ? query.trim() : '';
+
+    if (!trimmedQuery) {
+        return res.json({
+            total: 0,
+            page: 1,
+            limit: parseInt(limit),
+            results: []
+        });
     }
 
     try {
@@ -46,11 +59,21 @@ router.get('/search', async (req, res) => {
         const skip = (parseInt(page) - 1) * parseInt(limit);
         const limitNum = parseInt(limit);
 
-        const findQuery = { $text: { $search: query } };
+        // Split query into keywords
+        const keywords = trimmedQuery.split(/\s+/);
+
+        // Create an array of regex conditions for each keyword, targeting file_name
+        const regexConditions = keywords.map(keyword => ({
+            file_name: new RegExp(escapeRegex(keyword), 'i')
+        }));
+
+        // Build the final query using $and to ensure all keywords match
+        const findQuery = {
+            $and: regexConditions
+        };
         
         const total = await collection.countDocuments(findQuery);
         const results = await collection.find(findQuery)
-            .sort({ score: { $meta: "textScore" } })
             .skip(skip)
             .limit(limitNum)
             .toArray();
@@ -62,31 +85,7 @@ router.get('/search', async (req, res) => {
             results
         });
     } catch (error) {
-        console.error('Search error (might need text index):', error.message);
-        // Fallback for non-Atlas environments or if text index is missing
-        try {
-            const db = getDB();
-            const collection = db.collection('files');
-            const skip = (parseInt(page) - 1) * parseInt(limit);
-            const limitNum = parseInt(limit);
-            const regex = new RegExp(query, 'i');
-            const findQuery = { $or: [{ file_name: regex }, { caption: regex }] };
-            
-            const total = await collection.countDocuments(findQuery);
-            const results = await collection.find(findQuery)
-                .skip(skip)
-                .limit(limitNum)
-                .toArray();
-            
-            res.json({
-                total,
-                page: parseInt(page),
-                limit: limitNum,
-                results
-            });
-        } catch (fallbackError) {
-             res.status(500).json({ message: 'Error performing search', error: fallbackError.message });
-        }
+         res.status(500).json({ message: 'Error performing search', error: error.message });
     }
 });
 

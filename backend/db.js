@@ -9,9 +9,6 @@ async function connectDB() {
     await client.connect();
     db = client.db();
     console.log('Connected to MongoDB');
-    // It's crucial to create indexes for performance
-    await db.collection('files').createIndex({ file_name: 'text', caption: 'text' });
-    console.log('Text indexes ensured on "files" collection.');
     return db;
   } catch (err) {
     console.error('Failed to connect to MongoDB', err);
