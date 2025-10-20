@@ -78,10 +78,25 @@ router.get('/search', async (req, res) => {
 
         if (trimmedQuery) {
             const keywords = trimmedQuery.split(/\s+/);
-            const regexConditions = keywords.map(keyword => ({
-                file_name: new RegExp(escapeRegex(keyword), 'i')
-            }));
-            findQuery = { $and: regexConditions };
+            
+            const keywordConditions = keywords.map(keyword => {
+                const regex = new RegExp(escapeRegex(keyword), 'i');
+                const condition = {
+                    $or: [
+                        { file_name: regex },
+                        { title: regex },
+                    ]
+                };
+
+                // If a keyword is a 4-digit number, assume it's a year and search the year field
+                if (/^\d{4}$/.test(keyword)) {
+                    condition.$or.push({ year: keyword });
+                }
+
+                return condition;
+            });
+
+            findQuery = { $and: keywordConditions };
         }
         
         const total = await collection.countDocuments(findQuery);
