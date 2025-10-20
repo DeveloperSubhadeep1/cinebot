@@ -1,6 +1,3 @@
-// Fix: Add reference to vite client types to provide type definition for import.meta.env
-/// <reference types="vite/client" />
-
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { formatBytes } from '../utils/format';

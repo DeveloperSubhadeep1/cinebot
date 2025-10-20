@@ -14,8 +14,9 @@ Each directory is a separate project with its own `package.json` and dependencie
 - Node.js (v18+)
 - npm or yarn
 - A MongoDB Atlas account and a database cluster.
+- A GitHub account.
 
-## Setup & Running
+## Local Setup & Running
 
 ### Backend
 
@@ -38,7 +39,7 @@ Each directory is a separate project with its own `package.json` and dependencie
     - Connect to your MongoDB cluster.
     - Create a database (e.g., `cinebot`) and a collection named `files`.
     - Insert documents matching the schema provided in the project specification.
-    - **Crucially**, for the download/stream feature to work, you must place corresponding files in a `/backend/uploads` directory. Each file should be named with its MongoDB `_id` (without any extension).
+    - **Crucially**, for the download/stream feature to work locally, you must create a `/backend/uploads` directory. Each file should be named with its MongoDB `_id` (without any extension).
 
 5.  **Start the development server:**
     ```sh
@@ -67,8 +68,54 @@ Each directory is a separate project with its own `package.json` and dependencie
     ```sh
     npm run dev
     ```
-    The frontend application will be available at `http://localhost:5173` (or another port if 5173 is busy).
+    The frontend application will be available at `http://localhost:5173`.
+
+---
 
 ## Deployment
 
-Follow the deployment guides provided in the original project specification for deploying the backend to a service like Render and the frontend to Vercel/Netlify. Remember to set the environment variables in your hosting provider's dashboard.
+First, ensure your entire project is pushed to a GitHub repository.
+
+### Step 1: Deploy the Backend to Render
+
+1.  **Sign up or log in to [Render](https://render.com/).**
+2.  On your Dashboard, click **New +** and select **Web Service**.
+3.  Connect your GitHub account and select your repository.
+4.  **Configure the service:**
+    - **Name:** Choose a name (e.g., `cinebot-backend`).
+    - **Root Directory:** Set this to `backend`. This is very important, as it tells Render where to find the backend code.
+    - **Runtime:** `Node`.
+    - **Build Command:** `npm install`.
+    - **Start Command:** `npm start`.
+5.  Click **Advanced** to add environment variables.
+    - Click **+ Add Environment Variable** for each of the following:
+      - **Key:** `MONGO_URI`
+        - **Value:** Paste your MongoDB Atlas connection string.
+      - **Key:** `FRONTEND_ORIGIN`
+        - **Value:** Leave this blank for now. We will add it after deploying the frontend.
+6.  Click **Create Web Service**. Render will start building and deploying your backend.
+7.  Once deployed, copy the URL provided by Render (it will look like `https://your-service-name.onrender.com`). You will need this for the frontend.
+
+### Step 2: Deploy the Frontend to Vercel
+
+1.  **Sign up or log in to [Vercel](https://vercel.com/).**
+2.  From your Dashboard, click **Add New...** and select **Project**.
+3.  Import your GitHub repository.
+4.  **Configure the project:**
+    - Vercel should automatically detect that you're using **Vite**. The **Framework Preset**, **Build Command** (`npm run build`), and **Output Directory** (`dist`) should be set correctly.
+    - The **Root Directory** should be the default (root of the repository).
+5.  Expand the **Environment Variables** section.
+    - **Key:** `VITE_API_BASE_URL`
+    - **Value:** Paste the URL of your deployed Render backend (e.g., `https://cinebot-backend.onrender.com`).
+6.  Click **Deploy**. Vercel will build and deploy your frontend.
+7.  Once finished, Vercel will give you a domain for your site (e.g., `https://your-project.vercel.app`). Copy this URL.
+
+### Step 3: Finalize CORS Configuration
+
+1.  Go back to your **Render Dashboard**.
+2.  Navigate to your backend service's **Environment** tab.
+3.  Find the `FRONTEND_ORIGIN` variable you created earlier.
+4.  Click **Edit** and paste the URL of your Vercel frontend into the **Value** field.
+5.  **Save Changes**. Render will automatically restart your server with the new environment variable.
+
+Your application is now fully deployed and configured!
