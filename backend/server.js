@@ -15,6 +15,12 @@ app.use(helmet());
 app.use(morgan('dev'));
 app.use(express.json());
 
+// Add middleware to disable caching for API routes
+app.use('/api', (req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store');
+    next();
+});
+
 // Routes
 app.use('/api', apiRoutes);
 
