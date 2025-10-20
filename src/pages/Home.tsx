@@ -84,7 +84,7 @@ const Home: React.FC = () => {
             )}
 
             {!loading && debouncedQuery && results.length === 0 && (
-                <div className="text-center text-gray-400 mt-8">No results found for "{debouncedQuery}"</div>
+                <div className="text-center text-gray-500 dark:text-gray-400 mt-8">No results found for "{debouncedQuery}"</div>
             )}
         </div>
     );

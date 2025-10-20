@@ -9,12 +9,12 @@ interface MovieCardProps {
 
 const MovieCard: React.FC<MovieCardProps> = ({ file }) => {
     return (
-        <Link to={`/file/${file._id}`} className="block bg-gray-800 rounded-lg overflow-hidden shadow-lg hover:shadow-teal-500/20 hover:scale-105 transition-all duration-300">
+        <Link to={`/file/${file._id}`} className="block bg-white dark:bg-gray-800 rounded-lg overflow-hidden shadow-lg hover:shadow-teal-500/20 hover:scale-105 transition-all duration-300 border border-gray-200 dark:border-gray-700">
             <div className="p-6">
-                <h3 className="text-xl font-semibold mb-2 truncate text-teal-300" title={file.file_name}>{file.file_name}</h3>
-                <div className="flex justify-between items-center text-gray-400 text-sm">
+                <h3 className="text-xl font-semibold mb-2 truncate text-teal-600 dark:text-teal-300" title={file.file_name}>{file.file_name}</h3>
+                <div className="flex justify-between items-center text-gray-500 dark:text-gray-400 text-sm">
                     <span>{formatBytes(file.file_size)}</span>
-                    <span className="px-2 py-1 bg-gray-700 rounded-md">{file.mime_type.split('/')[1] || 'video'}</span>
+                    <span className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-md">{file.mime_type.split('/')[1] || 'video'}</span>
                 </div>
             </div>
         </Link>
