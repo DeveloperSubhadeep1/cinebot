@@ -42,38 +42,29 @@ router.get('/about', async (req, res) => {
 router.get('/search', async (req, res) => {
     const { query, page = 1, limit = 20 } = req.query;
     
-    const trimmedQuery = query ? query.trim() : '';
-
-    if (!trimmedQuery) {
-        return res.json({
-            total: 0,
-            page: 1,
-            limit: parseInt(limit),
-            results: []
-        });
-    }
-
     try {
         const db = getDB();
         const collection = db.collection('files');
         const skip = (parseInt(page) - 1) * parseInt(limit);
         const limitNum = parseInt(limit);
-
-        // Split query into keywords
-        const keywords = trimmedQuery.split(/\s+/);
-
-        // Create an array of regex conditions for each keyword, targeting file_name
-        const regexConditions = keywords.map(keyword => ({
-            file_name: new RegExp(escapeRegex(keyword), 'i')
-        }));
-
-        // Build the final query using $and to ensure all keywords match
-        const findQuery = {
-            $and: regexConditions
-        };
         
+        let findQuery = {};
+        const trimmedQuery = query ? query.trim() : '';
+
+        if (trimmedQuery) {
+            // If there is a query, build the search query
+            const keywords = trimmedQuery.split(/\s+/);
+            const regexConditions = keywords.map(keyword => ({
+                file_name: new RegExp(escapeRegex(keyword), 'i')
+            }));
+            findQuery = { $and: regexConditions };
+        }
+        
+        // If query is empty, findQuery is {} which matches all documents.
+        // We always sort by _id descending to get the latest files first.
         const total = await collection.countDocuments(findQuery);
         const results = await collection.find(findQuery)
+            .sort({ _id: -1 })
             .skip(skip)
             .limit(limitNum)
             .toArray();
