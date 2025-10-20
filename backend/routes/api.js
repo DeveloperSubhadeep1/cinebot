@@ -4,8 +4,24 @@ const { ObjectId } = require('mongodb');
 const rateLimit = require('express-rate-limit');
 const fs = require('fs');
 const path = require('path');
+const { GoogleGenAI, Type } = require('@google/genai');
 
 const router = express.Router();
+
+// Initialize Gemini AI Client
+// IMPORTANT: Ensure API_KEY is set in your .env file for the backend.
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+const metadataSchema = {
+    type: Type.OBJECT,
+    properties: {
+        title: { type: Type.STRING, description: 'The official movie title.' },
+        year: { type: Type.STRING, description: 'The release year of the movie.' },
+        summary: { type: Type.STRING, description: 'A concise, one-sentence plot summary.' },
+        posterUrl: { type: Type.STRING, description: 'A publicly accessible HTTPS URL for the movie poster image.' },
+    },
+    required: ['title', 'year', 'summary', 'posterUrl'],
+};
 
 // Helper to escape regex special characters
 function escapeRegex(string) {
@@ -19,6 +35,15 @@ const downloadLimiter = rateLimit({
 	standardHeaders: true,
 	legacyHeaders: false,
     message: 'Too many requests from this IP, please try again after 15 minutes',
+});
+
+// Rate limiter for metadata generation to protect API quota
+const metadataLimiter = rateLimit({
+    windowMs: 60 * 1000, // 1 minute
+    max: 30, // Limit each IP to 30 requests per minute
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: 'Too many metadata requests, please slow down.',
 });
 
 router.get('/ping', (req, res) => {
@@ -52,7 +77,6 @@ router.get('/search', async (req, res) => {
         const trimmedQuery = query ? query.trim() : '';
 
         if (trimmedQuery) {
-            // If there is a query, build the search query
             const keywords = trimmedQuery.split(/\s+/);
             const regexConditions = keywords.map(keyword => ({
                 file_name: new RegExp(escapeRegex(keyword), 'i')
@@ -60,8 +84,6 @@ router.get('/search', async (req, res) => {
             findQuery = { $and: regexConditions };
         }
         
-        // If query is empty, findQuery is {} which matches all documents.
-        // We always sort by _id descending to get the latest files first.
         const total = await collection.countDocuments(findQuery);
         const results = await collection.find(findQuery)
             .sort({ _id: -1 })
@@ -80,6 +102,68 @@ router.get('/search', async (req, res) => {
     }
 });
 
+router.get('/metadata/:id', metadataLimiter, async (req, res) => {
+    const { id } = req.params;
+    if (!ObjectId.isValid(id)) {
+        return res.status(400).json({ message: 'Invalid file ID' });
+    }
+    
+    const db = getDB();
+    const filesCollection = db.collection('files');
+    const fileId = new ObjectId(id);
+
+    try {
+        const file = await filesCollection.findOne({ _id: fileId });
+
+        if (!file) {
+            return res.status(404).json({ message: 'File not found' });
+        }
+
+        // Return cached metadata if it exists
+        if (file.posterUrl) {
+            return res.json({
+                title: file.title,
+                year: file.year,
+                summary: file.summary,
+                posterUrl: file.posterUrl,
+            });
+        }
+        
+        // If we already checked and found nothing, don't ask again.
+        if (file.metadata_checked) {
+            return res.status(404).json({ message: 'No metadata available for this file.' });
+        }
+        
+        // --- Gemini API Call ---
+        const prompt = `From the filename "${file.file_name}", identify the movie it represents. Extract the official title, the release year, a concise one-sentence plot summary, and find a publicly available URL for its poster image. Provide the response as a JSON object matching this schema. If you cannot identify a movie from the filename, all values in the JSON object should be null.`;
+
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+            config: {
+              responseMimeType: "application/json",
+              responseSchema: metadataSchema,
+            },
+        });
+        
+        const metadataText = response.text.trim();
+        const metadata = JSON.parse(metadataText);
+
+        if (metadata && metadata.posterUrl) {
+            await filesCollection.updateOne({ _id: fileId }, { $set: { ...metadata, metadata_checked: true } });
+            res.json(metadata);
+        } else {
+            // Mark as checked so we don't try again
+            await filesCollection.updateOne({ _id: fileId }, { $set: { metadata_checked: true } });
+            res.status(404).json({ message: 'Could not retrieve metadata from AI.' });
+        }
+    } catch (error) {
+        console.error('Metadata generation error:', error);
+        // Mark as checked even on error to prevent repeated failures
+        await filesCollection.updateOne({ _id: fileId }, { $set: { metadata_checked: true } });
+        res.status(500).json({ message: 'Error generating metadata', error: error.message });
+    }
+});
 
 router.get('/file/:id', async (req, res) => {
     const { id } = req.params;
@@ -107,7 +191,6 @@ router.get('/file/:id', async (req, res) => {
     }
 });
 
-// Generic file serving function for download and stream
 const serveFile = async (req, res, dispositionType) => {
     const { id } = req.params;
     if (!ObjectId.isValid(id)) {
@@ -122,12 +205,6 @@ const serveFile = async (req, res, dispositionType) => {
             return res.status(404).json({ message: 'File not found' });
         }
         
-        // --- IMPORTANT ---
-        // This is a placeholder for actual file retrieval logic.
-        // In a real application, you would use fileDoc.file_ref or _id
-        // to locate the file on a filesystem, cloud storage (S3), etc.
-        // For this example, we assume a local 'uploads' directory where files are named by their ID.
-        // YOU MUST IMPLEMENT YOUR OWN FILE STORAGE LOGIC HERE.
         const filePath = path.join(__dirname, '..', 'uploads', id.toString());
 
         if (!fs.existsSync(filePath)) {
@@ -144,7 +221,6 @@ const serveFile = async (req, res, dispositionType) => {
             'Accept-Ranges': 'bytes',
         };
 
-        // Sanitize filename for header
         const sanitizedFileName = encodeURIComponent(fileDoc.file_name).replace(/['()]/g, escape).replace(/\*/g, '%2A');
         headers['Content-Disposition'] = `${dispositionType}; filename*=UTF-8''${sanitizedFileName}`;
 

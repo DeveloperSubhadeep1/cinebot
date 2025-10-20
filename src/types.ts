@@ -18,4 +18,16 @@ export interface FileDocument {
     file_type: string;
     mime_type: string;
     caption: string;
+    // Optional fields from Gemini
+    title?: string;
+    year?: string;
+    summary?: string;
+    posterUrl?: string;
+}
+
+export interface MovieMetadata {
+    title: string;
+    year: string;
+    summary: string;
+    posterUrl: string;
 }
