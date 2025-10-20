@@ -174,8 +174,7 @@ router.get('/metadata/:id', metadataLimiter, async (req, res) => {
         }
     } catch (error) {
         console.error('Metadata generation error:', error);
-        // Mark as checked even on error to prevent repeated failures
-        await filesCollection.updateOne({ _id: fileId }, { $set: { metadata_checked: true } });
+        // Do not mark as checked on error, to allow for future retries on transient failures.
         res.status(500).json({ message: 'Error generating metadata', error: error.message });
     }
 });
